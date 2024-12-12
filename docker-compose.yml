@@ -1,0 +1,114 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: lakehouse_user
+      POSTGRES_PASSWORD: lakehouse_password
+      POSTGRES_DB: lakehouse
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lakehouse_network
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    volumes:
+      - minio_data:/data
+    networks:
+      - lakehouse_network
+
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "7077:7077"  # Master
+      - "8081:8080"  # UI
+    networks:
+      - lakehouse_network
+
+  spark-worker:
+    image: bitnami/spark:latest
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    depends_on:
+      - spark-master
+    networks:
+      - lakehouse_network
+
+  kafka:
+    image: wurstmeister/kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_HOST_NAME: localhost
+      KAFKA_ADVERTISED_PORT: 9092
+    ports:
+      - "9092:9092"
+    networks:
+      - lakehouse_network
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - lakehouse_network
+
+  trino:
+    image: trinodb/trino
+    container_name: trino
+    command: trino
+    ports:
+      - "8080:8080"
+    networks:
+      - lakehouse_network
+
+  metabase:
+    image: metabase/metabase
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    environment:
+      - MB_DB_FILE=/metabase-data/metabase.db
+    volumes:
+      - metabase_data:/metabase-data
+    networks:
+      - lakehouse_network
+
+  dbt:
+    image: fishtownanalytics/dbt:1.0.0
+    container_name: dbt
+    volumes:
+      - ./dbt_project:/dbt_project
+    working_dir: /dbt_project
+    networks:
+      - lakehouse_network
+
+volumes:
+  postgres_data:
+  minio_data:
+  metabase_data:
+
+networks:
+  lakehouse_network:
+    driver: bridge
