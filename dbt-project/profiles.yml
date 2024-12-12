@@ -1,0 +1,10 @@
+lakehouse_profile:
+  outputs:
+    dev:
+      type: spark
+      method: thrift
+      schema: lakehouse
+      host: spark-master
+      port: 10000
+      user: hadoop
+  target: dev
